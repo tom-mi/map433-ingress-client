@@ -18,8 +18,8 @@ RTL_433_CMD = ['rtl_433', '-F', 'json', '-M', 'time:iso:usec:utc', '-M', 'level'
 
 def main():
     args = parse_args()
-    logging.basicConfig(format='%(asctime)s %(levelname)-8s %(message)s',
-                        level=logging.DEBUG if args.verbose else logging.INFO)
+    loglevel = logging.DEBUG if args.verbose else logging.INFO
+    logging.basicConfig(format='%(asctime)s %(levelname)-8s %(message)s', level=loglevel)
     if args.write_config:
         write_sample_config(os.path.expanduser(args.config))
         return
@@ -41,7 +41,7 @@ def main():
     logging.info('Waiting for input.')
     print(args.command)
     with subprocess.Popen(args.command, stdout=subprocess.PIPE, encoding='utf8') as proc:
-        while True:
+        while proc.returncode is not None:
             line = proc.stdout.readline().strip()
             logging.debug(f'Received line {line}')
             body = None
