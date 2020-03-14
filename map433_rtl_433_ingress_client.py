@@ -5,18 +5,31 @@ import configparser
 import json
 import logging
 import os.path
+from threading import Event
+
+import select
+import signal
 import subprocess
 import sys
 import uuid
 from datetime import datetime
+import time
 
 import requests
 from requests import RequestException
 
 RTL_433_CMD = ['rtl_433', '-F', 'json', '-M', 'time:iso:usec:utc', '-M', 'level']
 
+shutdown = Event()
+
+
+def handle_terminate(signalNumber, frame):
+    logging.info('Received SIGTERM')
+    shutdown.set()
+
 
 def main():
+    signal.signal(signal.SIGTERM, handle_terminate)
     args = parse_args()
     loglevel = logging.DEBUG if args.verbose else logging.INFO
     logging.basicConfig(format='%(asctime)s %(levelname)-8s %(message)s', level=loglevel)
@@ -39,10 +52,17 @@ def main():
     logging.info(f'Receiver id: {receiver_id}')
     logging.info(f'Ingress endpoint: {ingress_endpoint}')
     logging.info('Waiting for input.')
-    print(args.command)
+
     with subprocess.Popen(args.command, stdout=subprocess.PIPE, encoding='utf8') as proc:
-        while proc.returncode is not None:
-            line = proc.stdout.readline().strip()
+        poll = select.poll()
+        poll.register(proc.stdout, select.POLLIN)
+        while proc.poll() is None and not shutdown.is_set():
+            if poll.poll(100):
+                line = proc.stdout.readline().strip()
+            else:
+                line = None
+            if not line:
+                continue
             logging.debug(f'Received line {line}')
             body = None
             try:
